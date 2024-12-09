@@ -1,0 +1,136 @@
+from flask import Flask, request, jsonify
+import subprocess
+import os
+import uuid
+import threading
+
+app = Flask(__name__)
+
+# Service Broker Catalog
+CATALOG = {
+    "services": [
+        {
+            "id": "app-replicator-service-id",
+            "name": "app-replicator-service",
+            "description": "CF App replication service",
+            "bindable": True,
+            "plans": [
+                {
+                    "id": "native-compile-plan-id",
+                    "name": "basic",
+                    "description": "Basic plan",
+                }
+            ]
+        }
+    ]
+}
+
+
+@app.route('/v2/catalog', methods=['GET'])
+def catalog():
+    return jsonify(CATALOG)
+
+@app.route('/v2/service_instances/<instance_id>', methods=['PUT'])
+def create_service_instance(instance_id):
+    data = request.get_json()
+    service_id = data.get("service_id")
+    plan_id = data.get("plan_id")
+
+    if service_id != "app-replicator-service-id" or plan_id != "native-compile-plan-id":
+        return jsonify({"error": "Service or plan not supported"}), 400
+    
+    app_name = f"app-replicator-app-{instance_id}"
+    groovy_app_path = os.getenv("GROOVY_APP_PATH", "/path/to/groovy/app")
+
+    def async_provision(): 
+        try:
+            apiEndpoint = os.getenv("CF_B_TARGET")
+            cfUser = os.getenv("CF_B_USER")
+            cfPass = os.getenv("CF_B_PASSWORD")
+            command = ["./" + os.getenv("BASH_SCRIPT"),apiEndpoint,cfUser,cfPass,"DemoOrg","DemoSpace","tmf-tdemo-native","tmf-tdemo-native2","homelab2.fynesy.com"]
+            print("calling script: " , command)
+            result = subprocess.run(command, text=True, capture_output=True)
+            print("Script Output(stdout):", result.stdout)
+            print("Script Output:(stderr)", result.stderr)
+        
+    
+            #subprocess.run(["/home/vcap/app/cf", "login", "-a", os.getenv("CF_TARGET"),"-u", os.getenv("CF_USER"),"-p", os.getenv("CF_PASSWORD"),"-o","DemoOrg","-s","DemoSpace"], check=True)
+            #subprocess.run(["/home/vcap/app/cf","apps"])
+            #result = subprocess.run(["/home/vcap/app/cf","download-droplet","tmf-tdemo-native","-p","/tmp/tmf-tdemo-native-droplet.tgz"],capture_output=True)
+            #print('stdout:' , result.stdout)
+            #print('stderr:', result.stderr)
+            #subprocess.run(["ls","-la","/tmp"])
+            #subprocess.run(["/home/vcap/app/cf","target","-o","DemoOrg","-s", "DemoSpace"])
+            #subprocess.run(["/home/vcap/app/cf","push",app_name, "-p" , groovy_app_path], check=True)
+
+        except subprocess.CalledProcessError as e:
+        #except subprocess.CalledProcessorError as e:
+            print("Error running script:", e)
+            print("Script Error Output:", e.stderr)
+            #return jsonify({"error": f"Failed to deploy app: {e}"}), 500
+
+    threading.Thread(target=async_provision).start() 
+    return jsonify({
+        "operation": f"provision-{instance_id}"
+    }), 202
+
+            #return jsonify({"dashboard_url":f"https://api.homelab.fynesy.com/apps/{app_name}"}), 202
+
+                   
+@app.route('/v2/service_instances/<instance_id>', methods=['DELETE'])
+def delete_service_instance(instance_id):
+    app_name = f"app-replicator-app-{instance_id}"
+
+    try:
+        subprocess.run(["/home/vcap/app/cf","delete", app_name, "-f"], check=True)
+        return jsonify({}), 200
+    except subprocess.CalledProcessError as e:
+        return jsonify({"error": f"Failed to delete app: {e}"}), 500
+    
+
+@app.route('/v2/service_instances/<instance_id>/last_operation', methods=['GET'])
+def last_operation(instance_id):
+    operation = request.args.get("operation")
+
+    # For simplicity, assume the operation is completed
+    # In a real-world scenario, you would check the actual status of the provisioning task
+    if operation.startswith("provision-"):
+        return jsonify({"state": "succeeded"}), 200
+    else:
+        return jsonify({"state": "failed"}), 500
+
+@app.route('/v2/service_instances/<instance_id>/service_bindings/<binding_id>', methods=['PUT'])
+def bind_service(instance_id, binding_id):
+    data = request.get_json()
+    service_id = data.get("service_id")
+    plan_id = data.get("plan_id")
+    app_guid = data.get("bind_resource", {}).get("app_guid")
+    
+    # Validate service and plan
+    if service_id != "app-replicator-service-id":
+        return jsonify({"error": "Service not supported"}), 400
+    if plan_id not in ["native-compile-plan-id", "foo-plan-id"]:
+        return jsonify({"error": "Plan not supported"}), 400
+
+    # Example: Generate credentials (this could involve retrieving or creating API keys, DB creds, etc.)
+    credentials = {
+        "username": f"user-{binding_id}",
+        "password": "securepassword123",
+        "url": f"https://app-replicator-{instance_id}.homelab2.fynesy.com"
+    }
+
+    # Optional: Perform binding logic, like updating the Groovy app configuration
+
+    # Return binding response
+    return jsonify({
+        "credentials": credentials
+    }), 201
+
+
+
+
+
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)

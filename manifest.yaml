@@ -1,0 +1,11 @@
+---
+applications:
+  - name: java-optimizer-broker
+    memory: 2G
+    disk: 2G
+    path: .
+    buildpacks:
+      - python_buildpack
+    services:
+      - cf-creds
+    
