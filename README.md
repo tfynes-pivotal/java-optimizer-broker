@@ -23,3 +23,5 @@ deploy-broker.sh shows the service broker registration steps - broker itself is 
 5. Broker binds <appname>-native instance to same ingress route as origin JIT compiled instance
 
 pass in argument -c '{"memory":"128M"}' in bind service call to adjust behavior
+
+Recommend: increase from 8GB to 12GB or 16GB in cf-java-optimizer.sh for native compiling of applications larger than 'hello-world'
